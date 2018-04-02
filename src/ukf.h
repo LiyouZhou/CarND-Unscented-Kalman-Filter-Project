@@ -102,6 +102,17 @@ public:
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
+
+private:
+  /**
+   * Utility function
+   * Updates the state and the state covariance matrix given a measurement,
+   * sigma points in measurement space, and the mesurement noise matrix
+   * @param meas_package The measurement at k+1
+   * @param Zsig sigma points in measurement space
+   * @param R mesurement noise matrix
+   */
+  void UpdateGeneric(MeasurementPackage meas_package, MatrixXd Zsig, MatrixXd R);
 };
 
 #endif /* UKF_H */
