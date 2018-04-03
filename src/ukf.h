@@ -92,27 +92,10 @@ public:
   void Prediction(double delta_t);
 
   /**
-   * Updates the state and the state covariance matrix using a laser measurement
-   * @param meas_package The measurement at k+1
-   */
-  void UpdateLidar(MeasurementPackage meas_package);
-
-  /**
-   * Updates the state and the state covariance matrix using a radar measurement
-   * @param meas_package The measurement at k+1
-   */
-  void UpdateRadar(MeasurementPackage meas_package);
-
-private:
-  /**
-   * Utility function
-   * Updates the state and the state covariance matrix given a measurement,
-   * sigma points in measurement space, and the mesurement noise matrix
-   * @param meas_package The measurement at k+1
-   * @param Zsig sigma points in measurement space
-   * @param R mesurement noise matrix
-   */
-  void UpdateGeneric(MeasurementPackage meas_package, MatrixXd Zsig, MatrixXd R);
+  * Updates the state and the state covariance matrix given a measurement
+  * @param meas_package The measurement at k+1
+  */
+  void Update(MeasurementPackage meas_package);
 };
 
 #endif /* UKF_H */

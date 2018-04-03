@@ -25,10 +25,10 @@ UKF::UKF() {
     P_ = MatrixXd::Identity(5, 5);
 
     // Process noise standard deviation longitudinal acceleration in m/s^2
-    std_a_ = 30;
+    std_a_ = 3;
 
     // Process noise standard deviation yaw acceleration in rad/s^2
-    std_yawdd_ = 30;
+    std_yawdd_ = 0.1;
 
     //DO NOT MODIFY measurement noise values below these are provided by the sensor manufacturer.
     // Laser measurement noise standard deviation position1 in m
@@ -58,6 +58,7 @@ UKF::UKF() {
     weights_ = VectorXd::Constant(2 * n_aug_ + 1, 0.5 / (lambda_ + n_aug_));
     weights_(0) = lambda_ / (lambda_ + n_aug_);
 
+    // Initialise matrix to hold sigma points in state space
     Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug_ + 1);
 }
 
@@ -68,7 +69,7 @@ UKF::~UKF() {}
  * either radar or laser.
  */
 void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
-    // Update timestamp Time is measured in seconds.
+    // Update timestamp. Time is measured in seconds.
     float dt = (meas_package.timestamp_ - time_us_) / 1000000.0;
     time_us_ = meas_package.timestamp_;
 
@@ -100,16 +101,14 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     /*****************************************************************************
      *  Prediction
      ****************************************************************************/
+    cout << "Prediction\n";
     Prediction(dt);
 
     /*****************************************************************************
      *  Update
      ****************************************************************************/
-    if ((meas_package.sensor_type_ == MeasurementPackage::RADAR) && use_radar_) {
-        UpdateRadar(meas_package);
-    } else if ((meas_package.sensor_type_ == MeasurementPackage::LASER) && use_laser_) {
-        UpdateLidar(meas_package);
-    }
+    cout << "Update\n";
+    Update(meas_package);
 }
 
 /**
@@ -118,7 +117,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
  * measurement and this one.
  */
 void UKF::Prediction(double delta_t) {
-    //create augmented mean state
+    //create augmented mean stat e
     VectorXd x_aug = VectorXd::Zero(n_aug_);
     x_aug.head(n_x_) = x_;
 
@@ -176,88 +175,68 @@ void UKF::Prediction(double delta_t) {
     P_.fill(0);
     for (int i = 0; i < Xsig_pred_.cols(); i++) {
         VectorXd a = Xsig_pred_.col(i) - x_;
-        //angle normalization
-        while (a(3) >  M_PI) a(3) -= 2. * M_PI;
-        while (a(3) < -M_PI) a(3) += 2. * M_PI;
+        a(3) = fmod(a(3), 2*M_PI); // angle normalization
         P_ += weights_(i) * a * a.transpose();
     }
 }
 
 /**
- * Updates the state and the state covariance matrix using a laser measurement.
- * @param {MeasurementPackage} meas_package
- */
-void UKF::UpdateLidar(MeasurementPackage meas_package) {
-    const int n_z = 2; // LIDAR measurement dimentions
+* Updates the state and the state covariance matrix given a measurement
+* @param meas_package The measurement at k+1
+*/
+void UKF::Update(MeasurementPackage meas_package)
+{
+    // measurement dimentions
+    int n_z = 0;
 
-    //create matrix for sigma points in measurement space
-    MatrixXd Zsig(n_z, 2 * n_aug_ + 1);
+    // process noise matrix
+    MatrixXd R;
 
-    //transform sigma points into measurement space
-    for (int i = 0; i < Xsig_pred_.cols(); i++) {
-        Zsig(0, i) = Xsig_pred_(0, i);
-        Zsig(1, i) = Xsig_pred_(1, i);
+    // Initialise measurement dimentions and process noise matrix depending on sensor type
+    if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+        n_z = 3;
+        R = MatrixXd::Zero(n_z, n_z);
+        R.diagonal() << std_radr_ * std_radr_,
+                        std_radphi_ * std_radphi_,
+                        std_radrd_ * std_radrd_;
+    } else {
+        n_z = 2;
+        R = MatrixXd::Zero(n_z, n_z);
+        R.diagonal() << std_laspx_ * std_laspx_,
+                        std_laspy_ * std_laspy_;
     }
-
-    // Define the process noise
-    MatrixXd R = MatrixXd::Zero(n_z, n_z);
-    R.diagonal() << std_laspx_ * std_laspx_,
-                    std_laspy_ * std_laspy_;
-
-    UpdateGeneric(meas_package, Zsig, R);
-}
-
-/**
- * Updates the state and the state covariance matrix using a radar measurement.
- * @param {MeasurementPackage} meas_package
- */
-void UKF::UpdateRadar(MeasurementPackage meas_package) {
-    const int n_z = 3; // RADAR measurement dimentions
 
     //create matrix for sigma points in measurement space
     MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1);
 
-    //transform sigma points into measurement space
+    //transform sigma points into measurement space depending on sensor type
     for (int i = 0; i < Xsig_pred_.cols(); i++) {
-        float px  = Xsig_pred_(0, i);
-        float py  = Xsig_pred_(1, i);
-        float v   = Xsig_pred_(2, i);
-        float psi = Xsig_pred_(3, i);
+        if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+            float px  = Xsig_pred_(0, i);
+            float py  = Xsig_pred_(1, i);
+            float v   = Xsig_pred_(2, i);
+            float psi = Xsig_pred_(3, i);
 
-        Zsig(0, i) = sqrt(px * px + py * py); // rho
-        Zsig(1, i) = atan2(py, px); // phi
-        Zsig(2, i) = v * (px * cos(psi) + py * sin(psi)) / Zsig(0, i); // rho_dot
+            Zsig(0, i) = sqrt(px * px + py * py); // rho
+            Zsig(1, i) = atan2(py, px); // phi
+            Zsig(2, i) = v * (px * cos(psi) + py * sin(psi)) / Zsig(0, i); // rho_dot
+        } else {
+            Zsig(0, i) = Xsig_pred_(0, i);
+            Zsig(1, i) = Xsig_pred_(1, i);
+        }
     }
 
-    // Define the process noise
-    MatrixXd R = MatrixXd::Zero(n_z, n_z);
-    R.diagonal() << std_radr_ * std_radr_,
-                    std_radphi_ * std_radphi_,
-                    std_radrd_ * std_radrd_;
-
-    UpdateGeneric(meas_package, Zsig, R);
-}
-
-/**
-* Utility function
-* Updates the state and the state covariance matrix given a measurement,
-* sigma points in measurement space, and the mesurement noise matrix
-* @param meas_package The measurement at k+1
-* @param Zsig sigma points in measurement space
-* @param R mesurement noise matrix
-*/
-void UKF::UpdateGeneric(MeasurementPackage meas_package, MatrixXd Zsig, MatrixXd R)
-{
     //calculate mean predicted measurement
     VectorXd z_pred = Zsig * weights_;
 
     //calculate innovation covariance matrix S
     MatrixXd S = R;
     for (int i = 0; i < Xsig_pred_.cols(); i++) {
-        MatrixXd a = Zsig.col(i) - z_pred;
+        MatrixXd a = Zsig.col(i) - z_pred; // residual
         //angle normalization
-        while (a(1) > M_PI) a(1) -= 2. * M_PI;
-        while (a(1) < -M_PI) a(1) += 2. * M_PI;
+        if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+            a(1) = fmod(a(1), 2*M_PI);
+        }
         S += weights_(i) * a * a.transpose();
     }
 
@@ -270,7 +249,18 @@ void UKF::UpdateGeneric(MeasurementPackage meas_package, MatrixXd Zsig, MatrixXd
     //calculate Kalman gain K;
     MatrixXd K = Tc * S.inverse();
 
+    //residual
+    VectorXd z_diff = meas_package.raw_measurements_ - z_pred;
+
+    //angle normalization
+    if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+        z_diff(1) = fmod(z_diff(1), 2*M_PI);
+    }
+
     //update state mean and covariance matrix
-    x_ = x_ + K * (meas_package.raw_measurements_ - z_pred);
-    P_ = P_ - K * S * K.transpose();
+    x_ += K * z_diff;
+    P_ -= K * S * K.transpose();
+
+    //angle normalization
+    x_(3) = fmod(x_(3), 2*M_PI);
 }
