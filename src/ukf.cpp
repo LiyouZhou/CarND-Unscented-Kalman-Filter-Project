@@ -28,7 +28,7 @@ UKF::UKF() {
     std_a_ = 2;
 
     // Process noise standard deviation yaw acceleration in rad/s^2
-    std_yawdd_ = 0.2;
+    std_yawdd_ = 0.3;
 
     //DO NOT MODIFY measurement noise values below these are provided by the sensor manufacturer.
     // Laser measurement noise standard deviation position1 in m
@@ -272,6 +272,8 @@ void UKF::Update(MeasurementPackage meas_package)
     static unsigned int radar_over_threshold_count = 0;
     static unsigned int lidar_count = 0;
     static unsigned int lidar_over_threshold_count = 0;
+    static const float radar_threshold = 7.815;
+    static const float lidar_threshold = 5.991;
 
     float NIS = (z_diff.transpose() * S.inverse() * z_diff)(0,0);
 
