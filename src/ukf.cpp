@@ -25,10 +25,10 @@ UKF::UKF() {
     P_ = MatrixXd::Identity(5, 5);
 
     // Process noise standard deviation longitudinal acceleration in m/s^2
-    std_a_ = 3;
+    std_a_ = 2;
 
     // Process noise standard deviation yaw acceleration in rad/s^2
-    std_yawdd_ = 0.1;
+    std_yawdd_ = 0.2;
 
     //DO NOT MODIFY measurement noise values below these are provided by the sensor manufacturer.
     // Laser measurement noise standard deviation position1 in m
@@ -60,6 +60,9 @@ UKF::UKF() {
 
     // Initialise matrix to hold sigma points in state space
     Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug_ + 1);
+
+    // create a file for nis logging
+    nis_file.open("nis.csv");
 }
 
 UKF::~UKF() {}
@@ -263,4 +266,29 @@ void UKF::Update(MeasurementPackage meas_package)
 
     //angle normalization
     x_(3) = fmod(x_(3), 2*M_PI);
+
+    // NIS analysis
+    static unsigned int radar_count = 0;
+    static unsigned int radar_over_threshold_count = 0;
+    static unsigned int lidar_count = 0;
+    static unsigned int lidar_over_threshold_count = 0;
+
+    float NIS = (z_diff.transpose() * S.inverse() * z_diff)(0,0);
+
+    // log the NIS value
+    nis_file << meas_package.sensor_type_ << ',' << NIS << endl;
+
+    // NIS threshold
+    if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+        ++radar_count;
+        if (NIS > radar_threshold)
+            ++radar_over_threshold_count;
+    } else {
+        ++lidar_count;
+        if (NIS > lidar_threshold)
+            ++lidar_over_threshold_count;
+    }
+    printf("nis over threshold rate: radar %.03f lidar %.03f\n",
+            radar_over_threshold_count / float(radar_count),
+            lidar_over_threshold_count / float(lidar_count));
 }
